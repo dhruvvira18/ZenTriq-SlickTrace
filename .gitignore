@@ -1,0 +1,141 @@
+# ==============================================================================
+# 1. ENVIRONMENT & SECRETS (NEVER COMMIT THESE)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials/
+secrets.json
+
+# ==============================================================================
+# 2. NEXT.JS / FRONTEND (Mapbox / React)
+# ==============================================================================
+node_modules/
+.pnp
+.pnp.js
+.next/
+out/
+build/
+coverage/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# ==============================================================================
+# 3. PYTHON / BACKEND (FastAPI / OpenDrift)
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env_python/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==============================================================================
+# 4. MACHINE LEARNING & JUPYTER (PyTorch / U-Net)
+# ==============================================================================
+# Jupyter Notebooks
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# ML Model Weights & Checkpoints (Heavy Files)
+*.pth
+*.pt
+*.onnx
+*.h5
+*.hdf5
+*.ckpt
+*.safetensors
+models/weights/
+checkpoints/
+runs/
+wandb/
+
+# ==============================================================================
+# 5. GEOSPATIAL & DATASETS (Sentinel-1 SAR, AIS, NetCDF)
+# ==============================================================================
+# Strictly ignore all massive datasets and simulated ocean vectors
+data/
+datasets/
+raw_data/
+processed_data/
+synthetic_data/
+
+# Specific Data Formats
+*.nc       # NetCDF (Ocean currents / OpenDrift)
+*.nc4
+*.tif      # Sentinel-1 SAR imagery
+*.tiff
+*.geotiff
+*.csv      # Raw AIS datasets
+*.parquet
+*.jsonl
+*.geojson  # Ignore if auto-generated/massive, track manually if small templates
+*.sqlite
+*.db
+
+# GIS specific
+*.shp
+*.shx
+*.dbf
+*.prj
+*.qgz      # QGIS project files
+
+# ==============================================================================
+# 6. OS & EDITOR CONFIGURATIONS
+# ==============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
