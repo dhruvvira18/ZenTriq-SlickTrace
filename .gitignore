@@ -86,19 +86,24 @@ wandb/
 # 5. GEOSPATIAL & DATASETS (Sentinel-1 SAR, AIS, NetCDF)
 # ==============================================================================
 # Strictly ignore all massive datasets and simulated ocean vectors
-data/
+data/sar/
 datasets/
 raw_data/
 processed_data/
 synthetic_data/
 
-# Specific Data Formats
+# Specific Data Formats (Ignore all EXCEPT our specific demo files)
 *.nc       # NetCDF (Ocean currents / OpenDrift)
+!data/metocean/mumbai_currents.nc
+
 *.nc4
 *.tif      # Sentinel-1 SAR imagery
 *.tiff
 *.geotiff
+
 *.csv      # Raw AIS datasets
+!data/ais/mumbai_synthetic_ais.csv
+
 *.parquet
 *.jsonl
 *.geojson  # Ignore if auto-generated/massive, track manually if small templates
