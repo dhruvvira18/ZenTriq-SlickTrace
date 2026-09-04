@@ -2,8 +2,8 @@ from datetime import datetime
 
 from sqlalchemy import text
 
-from database import get_db_engine
-from scoring import (
+from .database import get_db_engine
+from .scoring import (
     calculate_dark_ship_score,
     calculate_final_score,
     calculate_movement_score,
