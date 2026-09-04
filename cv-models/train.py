@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from torch.optim import AdamW
 import segmentation_models_pytorch as smp
 import albumentations as A
@@ -24,18 +24,27 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[*] Training on device: {device}")
 
-    # 2. Dataset and DataLoader
-    image_dir = "../data/sar/train/Class_1"
     mask_dir = "../data/sar/train/Masks"
-    
-    dataset = OilSpillDataset(
-        image_dir=image_dir, 
+
+    # 2. Dataset and Loader
+    # Load Class 1 (Oil)
+    dataset_class1 = OilSpillDataset(
+        image_dir="../data/sar/train/Class_1", 
         mask_dir=mask_dir, 
         transform=get_training_augmentation()
     )
     
-    # DataLoader handles batching and shuffling
-    train_loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=0)
+    # Load Class 0 (No Oil)
+    dataset_class0 = OilSpillDataset(
+        image_dir="../data/sar/train/Class_0", 
+        mask_dir=mask_dir, 
+        transform=get_training_augmentation()
+    )
+    
+    # Merge the two datasets mathematically
+    combined_dataset = ConcatDataset([dataset_class1, dataset_class0])
+    
+    train_loader = DataLoader(combined_dataset, batch_size=16, shuffle=True, num_workers=0)
 
     # 3. Model Architecture (U-Net with a pre-trained ResNet34 backbone)
     model = smp.Unet(
