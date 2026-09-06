@@ -1,12 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from datetime import datetime, timezone
 
+from vision_service import detect_oil_spill
+from opendrift_service import run_hindcast_simulation
 from forensics.engine import run_forensic_analysis
 from forensics.model import (
     ForensicAnalysisRequest,
     ForensicAnalysisResponse,
 )
-
 
 app = FastAPI(
     title="SlickTrace Maritime Forensics API",
@@ -29,6 +32,35 @@ def health_check():
 @app.get("/api/v1/health")
 def api_status():
     return {"status": "healthy", "postgis": "connected", "pipeline": "ready"}
+
+@app.post("/api/detect-spill")
+async def process_satellite_image(file: UploadFile = File(...)):
+    # Wait for the entire image stream to upload into memory
+    image_bytes = await file.read()
+    # Pass the bytes to the U-Net and return the GeoJSON instantly to the frontend
+    geojson_result = detect_oil_spill(image_bytes)
+    return geojson_result
+
+class HindcastRequest(BaseModel):
+    detection_lat: float
+    detection_lon: float
+    detection_time: datetime
+    hours_back: int = 24
+
+@app.post("/api/run-hindcast")
+def calculate_spill_origin(request: HindcastRequest):
+    # DEMO: Force date to match the mock AIS database
+    demo_date = datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc)
+
+    # Runs the reverse physics simulation
+    origin_data = run_hindcast_simulation(
+        start_lat=request.detection_lat,
+        start_lon=request.detection_lon,
+        detection_time=demo_date, # Overrides request.detection_time
+        hours_back=request.hours_back
+    )
+    
+    return origin_data
 
 @app.post(
     "/api/forensics/analyze",
