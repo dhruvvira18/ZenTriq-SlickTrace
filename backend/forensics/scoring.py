@@ -1,28 +1,34 @@
+import math
+
+
 def calculate_dark_ship_score(
     gap_duration_minutes: float,
     was_dark_at_dump: bool,
-    duration_cap_minutes: float = 120.0,
 ) -> float:
     """
     Calculate Dark Ship Score from 0 to 100.
 
-    60% = duration component
-    40% = whether the vessel was dark at dump time
+    Uses diminishing returns for longer AIS gaps so that
+    even a very strong gap does not automatically produce 100.
+
+    Components:
+        70% = gap duration
+        30% = whether vessel was dark at dump time
     """
 
-    duration_score = min(
-        (gap_duration_minutes / duration_cap_minutes) * 100,
-        100,
+    # Longer gaps provide stronger evidence, but with diminishing returns.
+    duration_score = 100.0 * (
+        1.0 - math.exp(-gap_duration_minutes / 60.0)
     )
 
     temporal_score = 100.0 if was_dark_at_dump else 0.0
 
     score = (
-        0.60 * duration_score
-        + 0.40 * temporal_score
+        0.70 * duration_score
+        + 0.30 * temporal_score
     )
 
-    return round(score, 2)
+    return round(min(score, 100.0), 2)
 
 
 def calculate_spatial_proximity_score(
@@ -32,33 +38,32 @@ def calculate_spatial_proximity_score(
     """
     Convert distance from spill origin into a 0-100 score.
 
-    0 km      -> 100
-    50+ km    -> 0
+    Uses a smooth exponential decay rather than a hard linear
+    relationship.
     """
 
-    score = max(
-        0.0,
-        100.0 * (1.0 - distance_km / scoring_radius_km),
+    score = 100.0 * math.exp(
+        -distance_km / scoring_radius_km
     )
 
-    return round(score, 2)
+    return round(max(0.0, min(score, 100.0)), 2)
 
 
 def calculate_movement_score(
     robust_z: float,
-    z_cap: float = 10.0,
 ) -> float:
     """
-    Convert movement anomaly robust-z score
-    into a 0-100 movement behaviour score.
+    Convert movement anomaly robust-z score into a 0-100 score.
+
+    Uses diminishing returns so extreme anomalies remain strong
+    without automatically becoming 100.
     """
 
-    score = min(
-        (robust_z / z_cap) * 100,
-        100,
+    score = 100.0 * (
+        1.0 - math.exp(-robust_z / 10.0)
     )
 
-    return round(score, 2)
+    return round(max(0.0, min(score, 100.0)), 2)
 
 
 def calculate_final_score(

@@ -30,7 +30,7 @@ def get_dark_ship_evidence(dump_time: datetime):
             END AS was_dark_at_dump
         FROM vessel_dark_gaps
         WHERE gap_start <= :dump_time
-           OR gap_end >= :dump_time
+          AND gap_end >= :dump_time
         ORDER BY gap_duration_minutes DESC
     """)
     engine = get_db_engine()
