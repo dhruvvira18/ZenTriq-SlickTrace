@@ -172,6 +172,130 @@ def refresh_dark_gaps(connection):
 
     print("  ✓ vessel_dark_gaps rebuilt")
 
+def refresh_movement_scores(connection):
+    print("→ Rebuilding vessel_movement_scores...")
+
+    connection.execute(text("""
+        TRUNCATE TABLE vessel_movement_scores RESTART IDENTITY;
+
+        WITH ordered AS (
+            SELECT
+                mmsi,
+                vessel_name,
+                timestamp,
+                speed_knots,
+
+                LAG(speed_knots) OVER (
+                    PARTITION BY mmsi
+                    ORDER BY timestamp
+                ) AS previous_speed
+
+            FROM ais_vessel_positions
+            WHERE speed_knots IS NOT NULL
+        ),
+
+        changes AS (
+            SELECT
+                mmsi,
+                vessel_name,
+                timestamp,
+                ABS(speed_knots - previous_speed) AS speed_change_knots
+            FROM ordered
+            WHERE previous_speed IS NOT NULL
+        ),
+
+        statistics AS (
+            SELECT
+                mmsi,
+                vessel_name,
+
+                MAX(speed_change_knots) AS max_speed_change_knots,
+
+                AVG(speed_change_knots) AS mean_change,
+
+                STDDEV_POP(speed_change_knots) AS std_change
+
+            FROM changes
+            GROUP BY
+                mmsi,
+                vessel_name
+        ),
+
+        anomalies AS (
+            SELECT
+                c.mmsi,
+                c.vessel_name,
+                c.timestamp,
+                c.speed_change_knots,
+                s.max_speed_change_knots,
+                s.mean_change,
+                s.std_change,
+
+                CASE
+                    WHEN s.std_change IS NULL
+                         OR s.std_change = 0
+                    THEN 0.0
+
+                    ELSE
+                        ABS(
+                            c.speed_change_knots - s.mean_change
+                        ) / s.std_change
+                END AS robust_z
+
+            FROM changes c
+
+            JOIN statistics s
+                ON s.mmsi = c.mmsi
+        ),
+
+        max_anomalies AS (
+            SELECT DISTINCT ON (mmsi)
+                mmsi,
+                vessel_name,
+                speed_change_knots,
+                robust_z,
+                timestamp
+            FROM anomalies
+
+            ORDER BY
+                mmsi,
+                robust_z DESC,
+                timestamp
+        )
+
+        INSERT INTO vessel_movement_scores (
+            mmsi,
+            vessel_name,
+            max_speed_change_knots,
+            max_robust_z,
+            movement_score,
+            anomaly_timestamp
+        )
+
+        SELECT
+            mmsi,
+            vessel_name,
+
+            speed_change_knots::real,
+
+            robust_z::real,
+
+            LEAST(
+                100.0,
+                GREATEST(
+                    0.0,
+                    100.0 * (
+                        1.0 - EXP(-robust_z / 10.0)
+                    )
+                )
+            )::real,
+
+            timestamp
+
+        FROM max_anomalies;
+    """))
+
+    print("  ✓ vessel_movement_scores rebuilt")
 
 def refresh_spatial_scores(connection):
     print("→ Rebuilding vessel_spatial_scores...")
@@ -440,9 +564,7 @@ def main():
         refresh_trajectories(connection)
         refresh_dark_gaps(connection)
 
-        # Movement scores are intentionally NOT rebuilt.
-        print("→ Keeping vessel_movement_scores unchanged")
-        print("  ✓ movement scores preserved")
+        refresh_movement_scores(connection)
 
         refresh_spatial_scores(connection)
         refresh_forensic_scores(connection)
