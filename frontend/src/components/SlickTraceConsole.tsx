@@ -14,7 +14,11 @@ import {
   BrainCircuit,
   Crosshair,
   ChevronRight,
+  Download,
 } from "lucide-react";
+
+import jsPDF from "jspdf";             
+import { toPng } from "html-to-image"; 
 
 const TacticalMap = dynamic(() => import("./TacticalMap"), {
   ssr: false,
@@ -74,6 +78,7 @@ export default function SlickTraceConsole() {
 
   const [playbackHour, setPlaybackHour] = useState(-24);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -515,7 +520,176 @@ export default function SlickTraceConsole() {
       );
     }
   };
+/*
+   * ---------------------------------------------------------
+   * NOS-DCP ANNEXURE K1-1 EXPORT ENGINE (TRUE BLACK & WHITE)
+   * ---------------------------------------------------------
+   */
+  const exportDossier = async () => {
+    if (!forensicResult || !centroid) return;
+    setIsExporting(true);
+    
+    showToast(
+      "info", 
+      "GENERATING SITREP", 
+      "Compiling NOS-DCP K1-1 evidence dossier. Please wait..."
+    );
+    
+    try {
+      const doc = new jsPDF("p", "mm", "a4");
+      const suspect = forensicResult.vessels.find((v: any) => v.rank === 1) || forensicResult.vessels[0];
 
+      // 1. Read SAR Image
+      let sarBase64 = "";
+      if (file) {
+        sarBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // 2. Read Map Canvas (UI is hidden during this capture)
+      const mapElement = document.getElementById('tactical-map-capture');
+      let mapBase64 = "";
+      if (mapElement) {
+        mapBase64 = await toPng(mapElement, { 
+          backgroundColor: "#05080f",
+          pixelRatio: 3, 
+          skipFonts: true, 
+        });
+      }
+
+      // --- PAGE 1: NOS-DCP K1-1 PRO FORMA ---
+      doc.setFillColor(255, 255, 255); // White Background
+      doc.rect(0, 0, 210, 297, "F");
+      
+      doc.setFont("courier", "bold");
+      doc.setTextColor(220, 38, 38); // Keep Red for Confidential Stamp
+      doc.setFontSize(12);
+      doc.text("CONFIDENTIAL // LAW ENFORCEMENT SENSITIVE", 105, 15, { align: "center" });
+
+      doc.setTextColor(0, 0, 0); // TRUE BLACK for all main text
+      doc.setFontSize(14);
+      doc.text("ANNEXURE K1-1: SPILL NOTIFICATION PRO FORMA", 15, 30);
+      
+      doc.setFont("courier", "normal");
+      doc.setFontSize(11);
+      doc.text("To: MRCC Mumbai", 15, 38);
+      doc.text("Fax: +91 22 24316558", 15, 43);
+
+      doc.setFont("courier", "bold");
+      doc.text("IDENTITY OF OBSERVER/REPORTER", 15, 55);
+      
+      doc.setFont("courier", "normal");
+      doc.text("Organisation:   NTRO Maritime Reconnaissance (SlickTrace AI)", 15, 62);
+      doc.text("Contact E-Mail: command@ntro.gov.in (Automated Dispatch)", 15, 67);
+
+      doc.setFont("courier", "bold");
+      doc.text("INCIDENT DETAILS", 15, 80);
+      
+      doc.setFont("courier", "normal");
+      doc.text("Date of Incident:   2026-08-29", 15, 87);
+      doc.text("Time of Incident:   10:00Z", 15, 92);
+      doc.text(`Latitude:           ${centroid[0].toFixed(5)}N`, 15, 97);
+      doc.text(`Longitude:          ${centroid[1].toFixed(5)}E`, 15, 102);
+      
+      doc.text("[X] Oil Release Notification", 15, 110);
+      doc.text("Is Release Ongoing? UNKNOWN (Satellite snapshot)", 15, 115);
+
+      doc.setFont("courier", "bold");
+      doc.text("SOURCE & EVIDENCE OF POLLUTION", 15, 128);
+      
+      doc.setFont("courier", "normal");
+      const sourceText = `Source of pollution: AIS & Lagrangian forensic correlation identifies ${suspect.vessel_name || "UNKNOWN"} (MMSI: ${suspect.mmsi}) as primary suspect.`;
+      const splitSource = doc.splitTextToSize(sourceText, 180);
+      doc.text(splitSource, 15, 135);
+      
+      doc.text(`System Confidence:  ${Number(suspect.final_score).toFixed(1)} / 100`, 15, 145);
+      doc.text("Photographs taken:  YES (Appended below)", 15, 150);
+
+      doc.setFont("courier", "bold");
+      doc.text("WEATHER CONDITIONS (T-0 HINDCAST)", 15, 163);
+      
+      doc.setFont("courier", "normal");
+      doc.text(`Wind Forcing:       ${formatVector(hindcastResult?.environment.wind_u, hindcastResult?.environment.wind_v)}`, 15, 170);
+      doc.text(`Ocean Currents:     ${formatVector(hindcastResult?.environment.current_u, hindcastResult?.environment.current_v)}`, 15, 175);
+
+      // --- DYNAMIC ASPECT RATIO FIX FOR SAR IMAGE ---
+      doc.setFont("courier", "bold");
+      doc.text("APPENDIX A: SAR SENSOR ACQUISITION", 15, 195);
+      if (sarBase64) {
+        const sarProps = doc.getImageProperties(sarBase64);
+        const sarRatio = Math.min(180 / sarProps.width, 85 / sarProps.height);
+        const sarW = sarProps.width * sarRatio;
+        const sarH = sarProps.height * sarRatio;
+        doc.addImage(sarBase64, 'JPEG', 15 + (180 - sarW) / 2, 200, sarW, sarH);
+      }
+
+      // --- PAGE 2: MAP & EXCLUSIONARY EVIDENCE ---
+      doc.addPage();
+      doc.setFillColor(255, 255, 255); // White Background
+      doc.rect(0, 0, 210, 297, "F");
+      
+      doc.setFont("courier", "bold");
+      doc.setTextColor(220, 38, 38); // Red for Confidential Stamp
+      doc.setFontSize(12);
+      doc.text("CONFIDENTIAL // LAW ENFORCEMENT SENSITIVE", 105, 15, { align: "center" });
+
+      doc.setTextColor(0, 0, 0); // TRUE BLACK for headers
+      doc.setFontSize(14);
+      doc.text("APPENDIX B: TACTICAL FORENSIC MAP", 15, 30);
+      if (mapBase64) {
+        const mapProps = doc.getImageProperties(mapBase64);
+        const mapRatio = Math.min(180 / mapProps.width, 85 / mapProps.height);
+        const mapW = mapProps.width * mapRatio;
+        const mapH = mapProps.height * mapRatio;
+        doc.addImage(mapBase64, 'PNG', 15 + (180 - mapW) / 2, 35, mapW, mapH);
+      }
+
+      doc.setFont("courier", "bold");
+      doc.setFontSize(14);
+      doc.text("APPENDIX C: MARPOL FIELD 14.2 EXCLUSIONARY MATRIX", 15, 130);
+      
+      doc.setFont("courier", "normal");
+      doc.setFontSize(10);
+
+      let yPos = 140;
+      const secondaryVessels = forensicResult.vessels.filter((v: any) => v.rank !== 1);
+      
+      if (secondaryVessels.length > 0) {
+        secondaryVessels.forEach((v: any) => {
+          doc.text(`- ${v.vessel_name || "UNKNOWN"} (MMSI: ${v.mmsi}) | Total Score: ${Number(v.final_score).toFixed(1)}/100 -> CLEARED`, 15, yPos);
+          yPos += 7;
+        });
+      } else {
+        doc.text("No other vessels detected within the spatial-temporal correlation window.", 15, yPos);
+        yPos += 7;
+      }
+
+      yPos += 10;
+      doc.setFont("courier", "bold");
+      doc.setFontSize(12);
+      doc.text("STEPS TAKEN TO RESPOND TO INCIDENT", 15, yPos);
+      
+      doc.setFont("courier", "normal");
+      doc.setFontSize(11);
+      const actionText = "Automated NOS-DCP Pro forma generated. Recommend deployment of ICG Pollution Control Vessel (PCV) and immediate PSC boarding of suspect vessel upon next port of call.";
+      const splitAction = doc.splitTextToSize(actionText, 180);
+      doc.text(splitAction, 15, yPos + 7);
+
+      // Create a clean timestamp for unique filenames
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      doc.save(`NOS-DCP-K1-1-${suspect.mmsi}_${timestamp}.pdf`);
+      
+      showToast("success", "SITREP EXPORTED", "NOS-DCP K1-1 Pro forma downloaded successfully.");
+    } catch (e) {
+      console.error("PDF Export Failed:", e);
+      showToast("error", "EXPORT FAILED", "Unable to generate the PDF dossier.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
   /*
    * ---------------------------------------------------------
    * VESSEL DARK-GAP STATE
@@ -1286,40 +1460,25 @@ export default function SlickTraceConsole() {
             =================================================== */}
 
         <div className="col-span-6 relative flex flex-col border border-slate-800 rounded-lg overflow-hidden shadow-2xl">
-          <TacticalMap
-            spillPolygon={
-              spillPolygon
-            }
-            centroid={centroid}
-            hindcastResult={
-              hindcastResult
-            }
-            vessels={
-              forensicResult?.vessels ||
-              []
-            }
-            isBriefingMode={
-              isBriefingMode
-            }
-            playbackHour={
-              playbackHour
-            }
-            setPlaybackHour={
-              setPlaybackHour
-            }
-            isPlaying={
-              isPlaying
-            }
-            setIsPlaying={
-              setIsPlaying
-            }
-            currentSimTime={
-              currentSimTime
-            }
-            setSelectedTarget={
-                setSelectedTarget
-            }
-          />
+          
+          <div id="tactical-map-capture" className="w-full h-full">
+            
+            <TacticalMap
+              spillPolygon={spillPolygon}
+              centroid={centroid}
+              hindcastResult={hindcastResult}
+              vessels={forensicResult?.vessels || []}
+              isBriefingMode={isBriefingMode}
+              playbackHour={playbackHour}
+              setPlaybackHour={setPlaybackHour}
+              isPlaying={isPlaying}
+              setIsPlaying={setIsPlaying}
+              currentSimTime={currentSimTime}
+              isExporting={isExporting}
+              setSelectedTarget={setSelectedTarget}
+            />
+
+          </div>
         </div>
 
         {/* ===================================================
@@ -1572,6 +1731,16 @@ export default function SlickTraceConsole() {
 
                 Suspect Matrix
               </span>
+                {pipelineState === "COMPLETE" && (
+                  <button 
+                    onClick={exportDossier} 
+                    disabled={isExporting}
+                    className="flex items-center gap-1.5 bg-slate-800 hover:bg-sky-900 border border-slate-600 hover:border-sky-500 text-white text-[10px] px-2.5 py-1.5 rounded transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {isExporting ? "GENERATING..." : "GENERATE SITREP"}
+                  </button>
+                )}
             </h2>
 
             <div className="flex-1 flex flex-col gap-3">
