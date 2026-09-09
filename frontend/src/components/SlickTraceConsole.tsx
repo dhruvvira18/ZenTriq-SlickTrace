@@ -46,6 +46,7 @@ type Toast = {
 };
 
 export default function SlickTraceConsole() {
+  const [selectedTarget, setSelectedTarget] = useState<any | null>(null);
   const [isBriefingMode, setIsBriefingMode] = useState(false);
 
   const [currentTimeUTC, setCurrentTimeUTC] = useState("");
@@ -716,6 +717,43 @@ export default function SlickTraceConsole() {
 
   /*
    * ---------------------------------------------------------
+   * HOLOGRAM RENDER HELPERS
+   * ---------------------------------------------------------
+   */
+  
+  // 1. Map Vessel Type to the correct holographic image
+  const getHologramAsset = (vesselType: string) => {
+    const type = (vesselType || "").toLowerCase();
+    if (type.includes("container")) return "/holograms/container.jpg";
+    if (type.includes("tanker")) return "/holograms/tanker.jpg";
+    return "/holograms/vessel.jpg";
+  };
+
+  // 2. Mathematically scale the geographic spill polygon to fit inside a 100x60 SVG viewbox
+  const getSpillSvgPoints = () => {
+    if (!spillPolygon || spillPolygon.length === 0) return "";
+    
+    const lats = spillPolygon.map(c => c[0]);
+    const lons = spillPolygon.map(c => c[1]);
+    
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+
+    const rangeX = maxLon - minLon || 1;
+    const rangeY = maxLat - minLat || 1;
+
+    // Pad by 10 units on all sides (rendering inside an 80x40 safe zone within the 100x60 box)
+    return spillPolygon.map(c => {
+      const x = ((c[1] - minLon) / rangeX) * 80 + 10;
+      const y = (1 - ((c[0] - minLat) / rangeY)) * 40 + 10; // Invert Y because SVG origin is top-left
+      return `${x},${y}`;
+    }).join(" ");
+  };
+
+  /*
+   * ---------------------------------------------------------
    * UI
    * ---------------------------------------------------------
    */
@@ -1138,6 +1176,108 @@ export default function SlickTraceConsole() {
                 </div>
               </div>
             </div>
+            {/* --- HOLOGRAPHIC TARGET PROFILER --- */}
+            <div className="flex-1 mt-6 flex flex-col min-h-[300px]">
+            <h2 className="text-xs font-mono font-bold tracking-widest text-slate-500 uppercase mb-2 flex items-center justify-between">
+                <span>Target Acquisition</span>
+                {selectedTarget && <span className="text-cyan-400 animate-pulse text-[10px] border border-cyan-900/50 bg-cyan-950/30 px-1.5 py-0.5 rounded">LOCKED</span>}
+            </h2>
+            
+                <div className="flex-1 bg-[#05080f] border border-slate-800 rounded-lg overflow-hidden flex flex-col relative shadow-[inset_0_0_40px_rgba(8,145,178,0.05)]">
+                    
+                    {selectedTarget ? (
+                    <>
+                        {/* Hologram Stage (CSS 3D Illusion) */}
+                        <div className="h-40 relative flex items-center justify-center border-b border-slate-800/80 overflow-hidden group">
+                        {/* 3D Grid Floor */}
+                        <div className="absolute bottom-0 w-full h-[200%] bg-[linear-gradient(to_right,#0891b220_1px,transparent_1px),linear-gradient(to_bottom,#0891b220_1px,transparent_1px)] bg-[size:1rem_1rem] [transform:rotateX(60deg)_translateY(50px)] [transform-origin:bottom_center] opacity-40"></div>
+                        
+                        {/* Projection Beam */}
+                        <div className="absolute bottom-0 w-32 h-full bg-gradient-to-t from-cyan-900/40 to-transparent blur-md"></div>
+                        
+                        {/* Hologram Graphic */}
+                        <div className="relative z-10 w-full h-full flex items-center justify-center pointer-events-none">
+                            {selectedTarget.mmsi ? (
+                                // Realistic 3D Vessel Hologram (Uses mix-blend-screen to remove black backgrounds)
+                                <img 
+                                    src={getHologramAsset(selectedTarget.vessel_type)} 
+                                    alt={selectedTarget.vessel_type}
+                                    className="w-[90%] h-[90%] object-contain opacity-90 mix-blend-screen drop-shadow-[0_0_15px_rgba(34,211,238,0.8)] [transform:translateY(-10px)]"
+                                />
+                            ) : (
+                                // Dynamic Oil Spill Hologram
+                                <svg width="120" height="70" viewBox="0 0 100 60" fill="none" stroke="#f59e0b" strokeWidth="1.5" className="drop-shadow-[0_0_15px_rgba(245,158,11,0.8)] [transform:rotateX(20deg)]">
+                                    <polygon 
+                                        points={getSpillSvgPoints()} 
+                                        fill="rgba(245,158,11,0.2)" 
+                                        strokeDasharray="2 2"
+                                        className="animate-[pulse_3s_ease-in-out_infinite]"
+                                    />
+                                    {/* Scan target reticle over the spill */}
+                                    <circle cx="50" cy="30" r="3" fill="#f59e0b" />
+                                    <line x1="40" y1="30" x2="60" y2="30" strokeOpacity="0.5" />
+                                    <line x1="50" y1="20" x2="50" y2="40" strokeOpacity="0.5" />
+                                </svg>
+                            )}
+                        </div>
+                        
+                        {/* Animated Scanline */}
+                        <div className="absolute top-0 w-full h-1 bg-cyan-400/50 shadow-[0_0_10px_rgba(34,211,238,0.8)] animate-[scan_2s_ease-in-out_infinite]"></div>
+                        <style dangerouslySetInnerHTML={{__html: `
+                            @keyframes scan {
+                            0%, 100% { top: 0%; opacity: 0; }
+                            10% { opacity: 1; }
+                            90% { opacity: 1; }
+                            50% { top: 100%; }
+                            }
+                        `}} />
+                        </div>
+
+                        {/* Tactical Data Grid */}
+                        <div className="p-3 font-mono text-[10px] flex flex-col gap-2 overflow-y-auto">
+                        {selectedTarget.mmsi ? (
+                            // Vessel Data Readout
+                            <>
+                            <div className="text-cyan-300 font-bold text-xs mb-1 tracking-wider border-b border-cyan-900/50 pb-1">{selectedTarget.vessel_name}</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="flex flex-col"><span className="text-slate-500">MMSI</span><span className="text-slate-200">{selectedTarget.mmsi}</span></div>
+                                <div className="flex flex-col"><span className="text-slate-500">TYPE</span><span className="text-slate-200 truncate">{selectedTarget.vessel_type}</span></div>
+                                <div className="flex flex-col"><span className="text-slate-500">KINEMATICS</span><span className="text-amber-400">{selectedTarget.movement_score > 10 ? "ANOMALOUS" : "NOMINAL"}</span></div>
+                                <div className="flex flex-col"><span className="text-slate-500">AIS STATUS</span><span className={selectedTarget.dark_ship_score > 0 ? "text-red-400" : "text-emerald-400"}>{selectedTarget.dark_ship_score > 0 ? "GAPS DETECTED" : "TRANSMITTING"}</span></div>
+                                <div className="col-span-2 flex flex-col mt-1 p-1.5 bg-cyan-950/20 border border-cyan-900/30 rounded">
+                                <span className="text-slate-500 mb-0.5">FORENSIC MATCH CONFIDENCE</span>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-cyan-300 font-bold text-lg">{selectedTarget.final_score.toFixed(1)}%</span>
+                                    <span className="text-slate-400">RANK: {selectedTarget.rank}</span>
+                                </div>
+                                </div>
+                            </div>
+                            </>
+                        ) : (
+                            // Spill Data Readout
+                            <>
+                            <div className="text-amber-400 font-bold text-xs mb-1 tracking-wider border-b border-amber-900/50 pb-1">ANOMALY DETECTED: OIL SLICK</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="flex flex-col"><span className="text-slate-500">SIGNATURE</span><span className="text-slate-200">SAR Class 1</span></div>
+                                <div className="flex flex-col"><span className="text-slate-500">CONFIDENCE</span><span className="text-emerald-400">92.4%</span></div>
+                                <div className="flex flex-col"><span className="text-slate-500">EST. AREA</span><span className="text-slate-200">2.34 km²</span></div>
+                                <div className="flex flex-col"><span className="text-slate-500">THICKNESS</span><span className="text-slate-200">~ 1.2 mm</span></div>
+                            </div>
+                            </>
+                        )}
+                        </div>
+                    </>
+                    ) : (
+                    // Idle State
+                    <div className="h-full flex flex-col items-center justify-center text-slate-600 font-mono text-[10px] tracking-widest bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.02)_25%,rgba(255,255,255,0.02)_50%,transparent_50%,transparent_75%,rgba(255,255,255,0.02)_75%,rgba(255,255,255,0.02)_100%)] bg-[length:20px_20px]">
+                        <div className="w-8 h-8 border border-slate-700 rounded-full flex items-center justify-center mb-2">
+                        <div className="w-1 h-1 bg-slate-500 rounded-full animate-ping"></div>
+                        </div>
+                        <span>AWAITING TARGET SELECTION</span>
+                    </div>
+                    )}
+                </div>
+            </div>
           </div>
         </div>
 
@@ -1175,6 +1315,9 @@ export default function SlickTraceConsole() {
             }
             currentSimTime={
               currentSimTime
+            }
+            setSelectedTarget={
+                setSelectedTarget
             }
           />
         </div>
@@ -1448,6 +1591,7 @@ export default function SlickTraceConsole() {
                         key={
                           vessel.mmsi
                         }
+                        onClick={() => setSelectedTarget(vessel)}
                         className={`p-4 rounded border flex flex-col gap-3 transition-all ${
                           darkNow
                             ? "bg-red-950/80 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.2)]"

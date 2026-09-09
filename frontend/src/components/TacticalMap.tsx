@@ -46,6 +46,7 @@ interface TacticalMapProps {
   setIsPlaying: (val: boolean) => void;
 
   currentSimTime: Date;
+  setSelectedTarget: (target: any) => void;
 }
 
 
@@ -475,6 +476,7 @@ export default function TacticalMap({
   isPlaying,
   setIsPlaying,
   currentSimTime,
+  setSelectedTarget,
 }: TacticalMapProps) {
 
   // ==========================================================
@@ -1092,6 +1094,8 @@ export default function TacticalMap({
               spillPolygon
             }
 
+            eventHandlers={{ click: () => setSelectedTarget({ isSpill: true }) }}
+
             pathOptions={{
               color:
                 "#38bdf8",
@@ -1525,6 +1529,8 @@ export default function TacticalMap({
                 position={
                   currentData.position
                 }
+
+                eventHandlers={{ click: () => setSelectedTarget(vessel) }}
 
                 icon={
                   createVesselIcon(
