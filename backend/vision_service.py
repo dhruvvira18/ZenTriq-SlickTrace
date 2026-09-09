@@ -87,6 +87,7 @@ def detect_oil_spill(image_bytes: bytes):
             })
 
     return {
+        "is_oil_spill": len(features) > 0,
         "type": "FeatureCollection",
         "features": features
     }
