@@ -527,7 +527,10 @@ export default function SlickTraceConsole() {
    */
   const exportDossier = async () => {
     if (!forensicResult || !centroid) return;
+    
+    // 1. Trigger the UI to hide and wait for React to clear it
     setIsExporting(true);
+    await new Promise(resolve => setTimeout(resolve, 150));
     
     showToast(
       "info", 
@@ -539,14 +542,58 @@ export default function SlickTraceConsole() {
       const doc = new jsPDF("p", "mm", "a4");
       const suspect = forensicResult.vessels.find((v: any) => v.rank === 1) || forensicResult.vessels[0];
 
-      // 1. Read SAR Image
+      // 1. Read SAR Image (Convert TIFF to JPG in-browser if necessary)
       let sarBase64 = "";
+      const isTiff = file && (file.name.toLowerCase().endsWith(".tif") || file.name.toLowerCase().endsWith(".tiff"));
+
       if (file) {
-        sarBase64 = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.readAsDataURL(file);
-        });
+        if (isTiff) {
+          sarBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              try {
+                const UTIF = require("utif");
+                const buffer = e.target?.result as ArrayBuffer;
+                
+                // Decode the TIFF buffer
+                const ifds = UTIF.decode(buffer);
+                UTIF.decodeImage(buffer, ifds[0]);
+                const rgba = UTIF.toRGBA8(ifds[0]);
+
+                // Paint the pixels onto an invisible canvas
+                const canvas = document.createElement("canvas");
+                canvas.width = ifds[0].width;
+                canvas.height = ifds[0].height;
+                const ctx = canvas.getContext("2d");
+
+                if (ctx) {
+                  const imageData = new ImageData(
+                    new Uint8ClampedArray(rgba.buffer),
+                    canvas.width,
+                    canvas.height
+                  );
+                  ctx.putImageData(imageData, 0, 0);
+                  
+                  // Snap a JPG screenshot of the canvas for the PDF
+                  resolve(canvas.toDataURL("image/jpeg", 0.9)); 
+                } else {
+                  resolve("");
+                }
+              } catch (error) {
+                console.error("TIFF Conversion Failed:", error);
+                resolve("");
+              }
+            };
+            reader.readAsArrayBuffer(file);
+          });
+        } else {
+          // Standard JPG/PNG processing
+          sarBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.readAsDataURL(file);
+          });
+        }
       }
 
       // 2. Read Map Canvas (UI is hidden during this capture)
@@ -590,7 +637,7 @@ export default function SlickTraceConsole() {
       
       doc.setFont("courier", "normal");
       doc.text("Date of Incident:   2026-08-29", 15, 87);
-      doc.text("Time of Incident:   10:00Z", 15, 92);
+      doc.text("Time of Incident:   10:00 UTC / 15:30 IST", 15, 92);
       doc.text(`Latitude:           ${centroid[0].toFixed(5)}N`, 15, 97);
       doc.text(`Longitude:          ${centroid[1].toFixed(5)}E`, 15, 102);
       
@@ -618,12 +665,22 @@ export default function SlickTraceConsole() {
       // --- DYNAMIC ASPECT RATIO FIX FOR SAR IMAGE ---
       doc.setFont("courier", "bold");
       doc.text("APPENDIX A: SAR SENSOR ACQUISITION", 15, 195);
+      
       if (sarBase64) {
+        // The TIFF was successfully converted to a JPG, print it normally!
         const sarProps = doc.getImageProperties(sarBase64);
         const sarRatio = Math.min(180 / sarProps.width, 85 / sarProps.height);
         const sarW = sarProps.width * sarRatio;
         const sarH = sarProps.height * sarRatio;
         doc.addImage(sarBase64, 'JPEG', 15 + (180 - sarW) / 2, 200, sarW, sarH);
+      } else if (isTiff) {
+        // Absolute worst-case fallback if the user uploads a corrupted TIFF
+        doc.setFillColor(241, 245, 249); 
+        doc.rect(15, 200, 180, 80, "F");
+        doc.setTextColor(100, 116, 139); 
+        doc.setFontSize(10);
+        doc.text("[ SENSOR DECODE FAILED ]", 105, 235, { align: "center" });
+        doc.setTextColor(0, 0, 0); 
       }
 
       // --- PAGE 2: MAP & EXCLUSIONARY EVIDENCE ---
