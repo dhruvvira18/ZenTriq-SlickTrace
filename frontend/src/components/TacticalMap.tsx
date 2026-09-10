@@ -47,6 +47,7 @@ interface TacticalMapProps {
 
   currentSimTime: Date;
   setSelectedTarget: (target: any) => void;
+  isExporting: boolean;
 }
 
 
@@ -477,6 +478,7 @@ export default function TacticalMap({
   setIsPlaying,
   currentSimTime,
   setSelectedTarget,
+  isExporting,
 }: TacticalMapProps) {
 
   // ==========================================================
@@ -1029,6 +1031,7 @@ export default function TacticalMap({
           ====================================================== */}
 
       <MapContainer
+        preferCanvas={true}
         center={
           DEFAULT_CENTER
         }
@@ -1045,7 +1048,7 @@ export default function TacticalMap({
         }
 
         zoomControl={
-          true
+          !isExporting
         }
       >
 
@@ -1550,7 +1553,7 @@ export default function TacticalMap({
                     ship information.
                     ================================================= */}
 
-                {isTopTwo && (
+                {isTopTwo && !isExporting && (
 
                   <Tooltip
                     permanent
@@ -1792,7 +1795,7 @@ export default function TacticalMap({
           ====================================================== */}
 
       {centroid &&
-        originCoords && (
+        originCoords && !isExporting && (
 
         <div
           className="
