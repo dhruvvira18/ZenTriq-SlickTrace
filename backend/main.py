@@ -119,6 +119,9 @@ def predict_intercept(request: InterceptPredictionRequest):
         heading_degrees=vessel["heading"],
         prediction_minutes=request.prediction_minutes,
         interval_minutes=request.interval_minutes,
+        asset_latitude=request.asset_latitude,
+        asset_longitude=request.asset_longitude,
+        asset_speed_knots=request.asset_speed_knots,
     )
 
     prediction["metadata"] = {
