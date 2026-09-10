@@ -2,10 +2,10 @@ from pydantic import BaseModel, Field
 
 
 class InterceptPredictionRequest(BaseModel):
-    latitude: float = Field(..., ge=-90, le=90)
-    longitude: float = Field(..., ge=-180, le=180)
-    speed_knots: float = Field(..., ge=0)
-    heading_degrees: float = Field(..., ge=0, lt=360)
+    mmsi: int = Field(
+        ...,
+        description="Target vessel MMSI",
+    )
 
     prediction_minutes: int = Field(
         default=120,
@@ -19,7 +19,26 @@ class InterceptPredictionRequest(BaseModel):
         le=60,
     )
 
+    asset_latitude: float | None = Field(
+        default=None,
+        description="Response asset latitude",
+    )
+
+    asset_longitude: float | None = Field(
+        default=None,
+        description="Response asset longitude",
+    )
+
+    asset_speed_knots: float | None = Field(
+        default=None,
+        gt=0,
+        description="Response asset speed in knots",
+    )
+
 
 class InterceptPredictionResponse(BaseModel):
     type: str
     features: list
+    metadata: dict
+
+

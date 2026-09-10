@@ -2,11 +2,12 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone
-from intercept.geojson import build_prediction_geojson
 from intercept.model import (
     InterceptPredictionRequest,
     InterceptPredictionResponse,
 )
+from intercept.service import get_latest_vessel_position
+from intercept.geojson import build_prediction_geojson
 from vision_service import detect_oil_spill
 from opendrift_service import run_hindcast_simulation
 from forensics.engine import run_forensic_analysis
@@ -77,16 +78,58 @@ def analyze_forensics(request: ForensicAnalysisRequest):
         origin_longitude=request.origin_longitude,
     )
 
+from intercept.model import (
+    InterceptPredictionRequest,
+    InterceptPredictionResponse,
+)
+from intercept.service import get_latest_vessel_position
+from intercept.geojson import build_prediction_geojson
+
+
 @app.post(
     "/api/intercept/predict",
     response_model=InterceptPredictionResponse,
 )
 def predict_intercept(request: InterceptPredictionRequest):
-    return build_prediction_geojson(
-        latitude=request.latitude,
-        longitude=request.longitude,
-        speed_knots=request.speed_knots,
-        heading_degrees=request.heading_degrees,
+
+    vessel = get_latest_vessel_position(request.mmsi)
+
+    if vessel is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No AIS data found for MMSI {request.mmsi}",
+        )
+
+    if vessel["speed_knots"] is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Latest AIS observation has no speed value.",
+        )
+
+    if vessel["heading"] is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Latest AIS observation has no heading value.",
+        )
+
+    prediction = build_prediction_geojson(
+        latitude=vessel["latitude"],
+        longitude=vessel["longitude"],
+        speed_knots=vessel["speed_knots"],
+        heading_degrees=vessel["heading"],
         prediction_minutes=request.prediction_minutes,
         interval_minutes=request.interval_minutes,
+        asset_latitude=request.asset_latitude,
+        asset_longitude=request.asset_longitude,
+        asset_speed_knots=request.asset_speed_knots,
     )
+
+    prediction["metadata"] = {
+        "mmsi": vessel["mmsi"],
+        "vessel_name": vessel["vessel_name"],
+        "vessel_type": vessel["vessel_type"],
+        "ais_timestamp": vessel["timestamp"],
+        "source": "Supabase ais_vessel_positions",
+    }
+
+    return prediction
